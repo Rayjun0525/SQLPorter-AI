@@ -1,97 +1,53 @@
+# main.py
+
+"""
+🔹 현재 작업: 실행 진입점 구성
+파일: main.py
+목표:
+    - 설정 로딩
+    - FastAgent 실행 컨텍스트 열기
+    - 입력 폴더의 모든 SQL 파일을 순회하며 변환 수행
+
+💡 실행: uv run main.py
+"""
+
 import asyncio
+from pathlib import Path
+from config.loader import load_sqlporter_config
+from core.runner import run_single_sql
+from core.file_io import get_sql_files, read_sql_file, write_sql_with_comment, write_report
 from mcp_agent.core.fastagent import FastAgent
 
-fast = FastAgent("OracleToPostgresAgent")
+async def main():
+    config = load_sqlporter_config()
+    input_dir = Path(config["paths"]["input_dir"])
+    output_dir = Path(config["paths"]["output_dir"])
+    report_dir = Path(config["paths"]["report_dir"])
+    prefix = config["settings"].get("comment_prefix", "--")
 
-@fast.agent(
-    name="port_oracle_to_postgres",
-instruction="""
-You are a strict validator.
+    output_dir.mkdir(exist_ok=True)
+    report_dir.mkdir(exist_ok=True)
 
-Given:
-1. The original Oracle SQL.
-2. The PostgreSQL SQL that was translated.
+    fast = FastAgent("SQLPorter Main")
 
-Evaluate:
-- Is the converted PostgreSQL query accurate, equivalent, and executable?
-- Are all Oracle-specific elements correctly ported?
-- Does any semantic or syntax issue remain?
+    summary = {}
 
-Respond with the following JSON object **ONLY**, no markdown, no explanation, no text before or after:
-
-{"result": 0 or 1, "feedback": "If result is 1, explain what must be fixed. If result is 0, leave empty."}
-"""
-)
-async def port_oracle_to_postgres(oracle_sql):
     async with fast.run() as agent:
-        return await agent(oracle_sql)
-
-@fast.agent(
-    name="verify_sql_conversion_strict",
-    instruction="""
-You are a strict validator.
-
-Given:
-1. The original Oracle SQL.
-2. The PostgreSQL SQL that was translated.
-
-Evaluate:
-- Is the converted PostgreSQL query accurate, equivalent, and executable?
-- Are all Oracle-specific elements correctly ported?
-- Does any semantic or syntax issue remain?
-
-Respond ONLY in the following JSON format:
-
-{
-  "result": 0 or 1,
-  "feedback": "If result is 1, explain what must be fixed. If result is 0, leave empty."
-}
-"""
-)
-async def verify_sql_conversion_strict(payload: dict):
-    async with fast.run() as agent:
-        return await agent(payload)
-
-def load_sql_from_file(path: str) -> str:
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read().strip()
-
-def write_output_sql(sql: str):
-    with open("output.sql", "w", encoding="utf-8") as f:
-        f.write("-- ✅ PostgreSQL SQL Converted from Oracle\n")
-        f.write(sql.strip() + "\n")
-
-async def run_pipeline(oracle_sql: str, max_attempts: int = 10):
-    async with fast.run() as agent:
-        current_sql = oracle_sql
-
-        for attempt in range(1, max_attempts + 1):
-            print(f"🔄 포팅 시도 {attempt} ...")
-            converted_sql = await agent.port_oracle_to_postgres(current_sql)
-
-            verification_result_raw = await agent.verify_sql_conversion_strict({
-                "oracle_sql": oracle_sql,
-                "postgresql_sql": converted_sql
-            })
-
+        for sql_path in get_sql_files(input_dir):
             try:
-                verification_result = eval(verification_result_raw) if isinstance(verification_result_raw, str) else verification_result_raw
-                result = verification_result.get("result")
-                feedback = verification_result.get("feedback", "").strip()
-            except Exception:
-                print("❌ 검수 JSON 파싱 실패. 응답 포맷 확인 필요.")
-                break
+                oracle_sql = read_sql_file(sql_path)
+                result_sql = await run_single_sql(agent, config, oracle_sql)
 
-            if result == 0:
-                print("✅ 검수 통과. 변환 완료.")
-                write_output_sql(converted_sql)
-                return
-            else:
-                print(f"❌ 검수 실패: {feedback}")
-                current_sql += f"\n-- 검수 피드백 반영: {feedback}"
+                comment = f"Converted from: {sql_path.name}"
+                out_path = output_dir / sql_path.name
+                write_sql_with_comment(out_path, result_sql, comment, prefix)
 
-        print("🚫 최대 시도 횟수 초과. 변환 실패.")
+                summary[sql_path.name] = {"status": "success"}
+            except Exception as e:
+                summary[sql_path.name] = {"status": "error", "message": str(e)}
+
+    write_report(report_dir / "result_summary.json", summary)
+    print("✅ 변환 완료. 리포트 생성됨.")
 
 if __name__ == "__main__":
-    oracle_sql = load_sql_from_file("input.sql")
-    asyncio.run(run_pipeline(oracle_sql))
+    asyncio.run(main())
