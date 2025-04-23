@@ -1,27 +1,30 @@
 # agents/merge.py
+"""SQL 병합 및 선택 에이전트(merge_and_select)를 정의합니다."""
 
-"""
-🔹 현재 작업: 병합/선택 에이전트 정의
-파일: agents/merge.py
-목표: 여러 변환 후보 중 최적 또는 병합된 결과를 선택하는 agent 정의
+from core.app import fast_agent_instance
 
-다음 단계 예고: agents/evaluator.py 작성 (PostgreSQL SQL 평가 agent)
-"""
+@fast_agent_instance.agent(name="merge_and_select", instruction="""
+Given the original Oracle SQL and multiple candidate PostgreSQL conversions,
+merge the best parts of the candidates and select the best final PostgreSQL SQL.
+Also, report the transformation rules applied in the final selected SQL.
 
-from mcp_agent.core.fastagent import FastAgent
+Input:
+- oracle_sql: The original Oracle SQL query.
+- candidates: A list of PostgreSQL SQL strings converted by different agents.
 
-fast = FastAgent("SQL Merge Agent")
+**IMPORTANT:** Respond ONLY with a JSON object containing the best merged/selected PostgreSQL SQL string and the applied transformations.
+Keys must be "postgresql_sql" and "transformations".
+"transformations" must be a list of objects, each with "from", "to", and "context" keys, representing the rules present in the final SQL.
+It's very important.
 
-@fast.agent(name="merge_and_select", instruction="""
-Given:
-- oracle_sql: the original Oracle SQL query
-- candidates: a list of converted PostgreSQL SQL queries
-
-Evaluate:
-- Which candidate best preserves the original intent?
-- Optionally, merge the strengths of each.
-
-Respond ONLY with the final, selected PostgreSQL SQL.
+Example:
+{
+  "postgresql_sql": "SELECT final_column FROM final_table WHERE COALESCE(col2, 'default');",
+  "transformations": [
+    {"from": "VARCHAR2", "to": "VARCHAR", "context": "column type in final_column"},
+    {"from": "NVL", "to": "COALESCE", "context": "function call in WHERE clause"}
+  ]
+}
 """)
 async def merge_and_select(payload: dict):
     return payload
