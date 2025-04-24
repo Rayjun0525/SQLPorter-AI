@@ -10,7 +10,7 @@ An intelligent SQL conversion tool that transforms Oracle SQL into PostgreSQL us
 
 | Tool     | Install |
 |----------|---------|
-| uv       | `curl -LsSf https://astral.sh/uv/install.sh | sh` |
+| uv       | curl -LsSf https://astral.sh/uv/install.sh | sh |
 | python3.12+ | Install via system package manager |
 | fast-agent-mcp | `uv pip install fast-agent-mcp` |
 
