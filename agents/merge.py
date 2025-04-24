@@ -1,6 +1,3 @@
-# agents/merge.py
-"""SQL 병합 및 선택 에이전트(merge_and_select)를 정의합니다."""
-
 from core.app import fast_agent_instance
 
 @fast_agent_instance.agent(name="merge_and_select", instruction="""
@@ -12,10 +9,9 @@ Input:
 - oracle_sql: The original Oracle SQL query.
 - candidates: A list of PostgreSQL SQL strings converted by different agents.
 
-**IMPORTANT:** Respond ONLY with a JSON object containing the best merged/selected PostgreSQL SQL string and the applied transformations.
+IMPORTANT: Respond ONLY with a JSON object containing the best merged/selected PostgreSQL SQL string and the applied transformations.
 Keys must be "postgresql_sql" and "transformations".
-"transformations" must be a list of objects, each with "from", "to", and "context" keys, representing the rules present in the final SQL.
-It's very important.
+"transformations" must be a list of objects, each with "from", "to", and "context" keys.
 
 Example:
 {

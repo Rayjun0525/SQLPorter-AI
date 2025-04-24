@@ -1,95 +1,103 @@
-# main.py
-
 import asyncio
-import logging # logging 모듈 추가
+import logging
 from pathlib import Path
-from config.loader import load_sqlporter_config
-from core.runner import run_single_sql
-from core.file_io import get_sql_files, read_sql_file, write_sql_with_comment, write_report
-from core.app import fast_agent_instance # 중앙 FastAgent 인스턴스 임포트
+import typer
 
-# 에이전트 정의 모듈 임포트 (등록을 위해 필요)
+from config.loader import load_sqlporter_config
+from config.logging_config import setup_logging
+from core.runner import run_single_sql
+from core.file_io import get_sql_files, read_sql_file, write_sql_with_comment, write_report, write_html_report
+from core.app import fast_agent_instance
+
 import agents.converters
 import agents.merge
 import agents.evaluator
 import agents.pipeline
 
-# 기본 로깅 설정
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+app = typer.Typer()
+__version__ = "1.0.0"
 
-async def main():
-    # 설정 로드
+@app.command()
+def run(
+    config_path: Path = Path("fastagent.config.yaml"),
+    secret_path: Path = Path("fastagent.secrets.yaml")
+):
     try:
-        config = load_sqlporter_config()
-    except SystemExit: # load_sqlporter_config에서 오류 시 sys.exit() 호출하므로 처리
-        logging.error("설정 파일 로드 실패. 프로그램을 종료합니다.")
-        return # main 함수 종료
+        config = load_sqlporter_config(config_path)
+    except SystemExit:
+        logging.error("Failed to load configuration file. Exiting.")
+        return
 
-    input_dir = Path(config["paths"]["input_dir"])
-    output_dir = Path(config["paths"]["output_dir"])
-    report_dir = Path(config["paths"]["report_dir"])
-    prefix = config["settings"].get("comment_prefix", "--")
+    setup_logging(config.get("logger", {}))
 
-    # 출력 및 리포트 디렉토리 생성 (file_io에서 처리하므로 주석 처리 또는 제거 가능)
-    # output_dir.mkdir(exist_ok=True)
-    # report_dir.mkdir(exist_ok=True)
-    # file_io의 write 함수들이 부모 디렉토리를 생성해주므로 여기서 미리 만들 필요는 없습니다.
+    paths = config.get("paths", {})
+    input_dir = Path(paths.get("input_dir", "./ASIS"))
+    output_dir = Path(paths.get("output_dir", "./TOBE"))
+    report_dir = Path(paths.get("report_dir", "./reports"))
+    prefix = config.get("settings", {}).get("comment_prefix", "--")
 
-    summary = {} # 결과 요약 저장용
+    summary = {}
+    logging.info("Starting SQL conversion process...")
 
-    logging.info("SQL 변환 작업을 시작합니다...")
-
-    # 중앙 FastAgent 인스턴스를 사용하여 에이전트 실행
     try:
-        async with fast_agent_instance.run() as agent:
-            sql_files = get_sql_files(input_dir)
-            if not sql_files:
-                logging.warning(f"입력 디렉토리 '{input_dir}'에 SQL 파일이 없습니다.")
-                return
+        async def run_agents():
+            async with fast_agent_instance.run() as agent:
+                sql_files = get_sql_files(input_dir)
+                if not sql_files:
+                    logging.warning(f"No SQL files found in '{input_dir}'.")
+                    return
 
-            logging.info(f"총 {len(sql_files)}개의 SQL 파일을 처리합니다.")
+                logging.info(f"Processing {len(sql_files)} SQL files...")
 
-            for sql_path in sql_files:
-                logging.info(f"파일 처리 시작: {sql_path.name}")
-                try:
-                    oracle_sql = read_sql_file(sql_path)
-                    # run_single_sql 호출 시 agent 객체 전달
-                    result_sql = await run_single_sql(agent, config, oracle_sql)
+                for sql_path in sql_files:
+                    logging.info(f"Processing file: {sql_path.name}")
+                    try:
+                        oracle_sql = read_sql_file(sql_path)
+                        result_payload = await run_single_sql(agent, config, oracle_sql, sql_path.name)
 
-                    # 결과 파일 작성
-                    comment = f"Converted from: {sql_path.name}"
-                    out_path = output_dir / sql_path.name
-                    write_sql_with_comment(out_path, result_sql, comment, prefix)
+                        final_sql = result_payload.get("postgresql_sql", "")
+                        comment = f"Converted from: {sql_path.name}"
+                        write_sql_with_comment(output_dir, input_dir, sql_path, final_sql, comment, prefix)
 
-                    summary[sql_path.name] = {"status": "success"}
-                    logging.info(f"파일 처리 완료: {sql_path.name} -> {out_path.name}")
+                        summary[sql_path.name] = {
+                            "status": "success" if final_sql else "incomplete",
+                            "error": result_payload.get("error", ""),
+                            "rating": result_payload.get("RATING", ""),
+                            "feedback": result_payload.get("FEEDBACK", "")
+                        }
 
-                except FileNotFoundError: # read_sql_file에서 sys.exit 대신 예외 발생 시
-                    logging.error(f"파일을 찾을 수 없어 건너<0xEB><0><0x8A><0xB4>니다: {sql_path.name}")
-                    summary[sql_path.name] = {"status": "error", "message": "File not found"}
-                except IOError as e: # read/write 에서 sys.exit 대신 예외 발생 시
-                     logging.error(f"파일 처리 중 입출력 오류 발생 ({sql_path.name}): {e}")
-                     summary[sql_path.name] = {"status": "error", "message": f"IO Error: {e}"}
-                except Exception as e:
-                    logging.exception(f"파일 처리 중 예상치 못한 오류 발생 ({sql_path.name}): {e}") # 스택 트레이스 포함 로깅
-                    summary[sql_path.name] = {"status": "error", "message": str(e)}
+                        logging.info(f"Finished: {sql_path.name}")
+
+                    except FileNotFoundError:
+                        logging.error(f"File not found: {sql_path.name}")
+                        summary[sql_path.name] = {"status": "error", "message": "File not found"}
+                    except IOError as e:
+                        logging.error(f"I/O error while processing {sql_path.name}: {e}")
+                        summary[sql_path.name] = {"status": "error", "message": f"I/O Error: {e}"}
+                    except Exception as e:
+                        logging.exception(f"Unexpected error while processing {sql_path.name}: {e}")
+                        summary[sql_path.name] = {"status": "error", "message": str(e)}
+
+        asyncio.run(run_agents())
 
     except Exception as e:
-        logging.exception(f"FastAgent 실행 중 오류 발생: {e}")
-        # 필요하다면 여기에서 추가적인 정리 작업 수행
-        return # 에이전트 실행 실패 시 리포트 작성 전 종료
+        logging.exception(f"Fatal error during FastAgent execution: {e}")
+        return
 
-    # 최종 리포트 작성
     try:
         report_file = report_dir / "result_summary.json"
         write_report(report_file, summary)
-        logging.info(f"✅ 변환 완료. 리포트 생성됨: {report_file}")
-    except IOError as e: # write_report에서 sys.exit 대신 예외 발생 시
-        logging.error(f"리포트 파일 작성 중 오류 발생: {e}")
+        write_html_report(report_file, summary)
+        logging.info(f"Conversion complete. Report generated: {report_file}")
+    except IOError as e:
+        logging.error(f"Failed to write report file: {e}")
     except Exception as e:
-        logging.exception(f"리포트 작성 중 예상치 못한 오류 발생: {e}")
+        logging.exception(f"Unexpected error while writing report: {e}")
 
+@app.command()
+def version():
+    """Show the current version of SQLPorter-AI."""
+    typer.echo(f"SQLPorter-AI version {__version__}")
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
+    app()
