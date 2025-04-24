@@ -5,7 +5,6 @@ from pathlib import Path
 
 from config.loader import load_sqlporter_config
 from config.logging_config import setup_logging
-from core.runner import run_single_sql
 from core.file_io import (
     get_sql_files,
     read_sql_file,
@@ -13,21 +12,34 @@ from core.file_io import (
     write_report,
     write_html_report
 )
+from core.runner import run_single_sql
+
+# ✅ FastAgent는 core.app에서 공유 인스턴스를 사용
+from core.app import fast_agent_instance
+
+# ✅ 에이전트 등록을 위한 강제 import (절대 생략하면 안 됨)
+import agents.converters
+import agents.merge
+import agents.evaluator
+import agents.pipeline
 
 __version__ = "1.0.0"
 
 
-def run_sqlporter(config_path: Path, secret_path: Path):
-    from mcp_agent.core.fastagent import FastAgent
+def main():
+    parser = argparse.ArgumentParser(description="SQLPorter-AI")
+    parser.add_argument("--config", type=Path, default=Path("fastagent.config.yaml"), help="Path to config file")
+    parser.add_argument("--secret", type=Path, default=Path("fastagent.secrets.yaml"), help="Path to secret file")
+    parser.add_argument("--version", action="store_true", help="Print version and exit")
 
-    try:
-        config = load_sqlporter_config(config_path)
-    except SystemExit:
-        logging.error("Failed to load configuration file. Exiting.")
+    args = parser.parse_args()
+
+    if args.version:
+        print(f"SQLPorter-AI version {__version__}")
         return
 
+    config = load_sqlporter_config(args.config)
     setup_logging(config.get("logger", {}))
-    fast_agent_instance = FastAgent("SQLPorter-AI")
 
     paths = config.get("paths", {})
     input_dir = Path(paths.get("input_dir", "./ASIS"))
@@ -36,7 +48,6 @@ def run_sqlporter(config_path: Path, secret_path: Path):
     prefix = config.get("settings", {}).get("comment_prefix", "--")
 
     summary = {}
-    logging.info("Starting SQL conversion process...")
 
     async def run_agents():
         async with fast_agent_instance.run() as agent:
@@ -87,30 +98,8 @@ def run_sqlporter(config_path: Path, secret_path: Path):
         write_report(report_file, summary)
         write_html_report(report_file, summary)
         logging.info(f"Conversion complete. Report generated: {report_file}")
-    except IOError as e:
-        logging.error(f"Failed to write report file: {e}")
     except Exception as e:
         logging.exception(f"Unexpected error while writing report: {e}")
-
-
-def main():
-    parser = argparse.ArgumentParser(description="SQLPorter-AI Command Line Tool")
-    subparsers = parser.add_subparsers(dest="command")
-
-    run_parser = subparsers.add_parser("run", help="Run SQL conversion")
-    run_parser.add_argument("--config", type=Path, default=Path("fastagent.config.yaml"))
-    run_parser.add_argument("--secret", type=Path, default=Path("fastagent.secrets.yaml"))
-
-    subparsers.add_parser("version", help="Show version")
-
-    args = parser.parse_args()
-
-    if args.command == "run":
-        run_sqlporter(args.config, args.secret)
-    elif args.command == "version":
-        print(f"SQLPorter-AI version {__version__}")
-    else:
-        parser.print_help()
 
 
 if __name__ == "__main__":
