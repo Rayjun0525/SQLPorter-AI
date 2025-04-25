@@ -5,15 +5,47 @@ import sys
 DEFAULT_CONFIG_PATH = Path("fastagent.config.yaml")
 
 SAMPLE_CONFIG = {
+    "default_model": "openai.gpt-4o-mini",
+
+    "generic": {
+        "base_url": "http://localhost:11434/v1"
+    },
+
+    "logger": {
+        "level": "INFO",
+        "type": "both",
+        "path": "./logs/sqlporter.log",
+        "progress_display": True,
+        "show_chat": True,
+        "show_tools": True,
+        "truncate_tools": True
+    },
+
+    "mcp": {
+        "servers": {
+            "fetch": {
+                "command": "uvx",
+                "args": ["mcp-server-fetch"]
+            },
+            "filesystem": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+            }
+        }
+    },
+
     "sqlporter": {
         "models": {
             "converter_1": "generic.gemma3:4b",
-            "converter_2": "generic.llama3:2:3b",
+            "converter_2": "generic.llama3.2:3b",
             "converter_3": "openai.gpt-4o-mini"
         },
         "instructions": {
             "converter_1": "",
-            "converter_2": "Convert the Oracle SQL to PostgreSQL using Llama3-specific syntax rules.",
+            "converter_2": (
+                "Convert the Oracle SQL to PostgreSQL using Llama3-specific syntax rules.\n"
+                "Respond ONLY with JSON as described in the default instruction."
+            ),
             "converter_3": ""
         },
         "paths": {
@@ -30,8 +62,9 @@ SAMPLE_CONFIG = {
     }
 }
 
+
 def generate_sample_yaml(path: Path = DEFAULT_CONFIG_PATH):
-    """Generate a sample config file if one does not exist."""
+    """Generate a full sample config file if one does not exist."""
     try:
         with open(path, "w", encoding='utf-8') as f:
             yaml.dump(SAMPLE_CONFIG, f, allow_unicode=True, sort_keys=False)
@@ -40,8 +73,9 @@ def generate_sample_yaml(path: Path = DEFAULT_CONFIG_PATH):
         print(f"Error creating sample config: {e}", file=sys.stderr)
         sys.exit(1)
 
+
 def load_sqlporter_config(path: Path = DEFAULT_CONFIG_PATH) -> dict:
-    """Load the configuration YAML file."""
+    """Load the configuration YAML file and return the sqlporter section."""
     if not path.exists():
         print(f"Config file ({path}) not found. Creating a sample...")
         generate_sample_yaml(path)
