@@ -32,7 +32,12 @@ Convert the given Oracle SQL to PostgreSQL.
 # Register all converters using loop
 for agent_name in ["converter_1", "converter_2", "converter_3"]:
     model = models_config.get(agent_name)
-    instruction = instructions_config.get(agent_name, DEFAULT_INSTRUCTION)
+    custom_instruction = instructions_config.get(agent_name)
+    
+    if custom_instruction:
+        instruction = f"{DEFAULT_INSTRUCTION.strip()}\n\n{custom_instruction.strip()}"
+    else:
+        instruction = DEFAULT_INSTRUCTION
 
     def register(name, model_name, instruction_text):
         @fast_agent_instance.agent(name=name, model=model_name, instruction=instruction_text)

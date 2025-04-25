@@ -12,34 +12,57 @@ def looks_like_sql(s: str) -> bool:
     return s_upper.startswith(('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'WITH', '--', '/*'))
 
 def process_agent_result(result_data: Any, agent_name: str) -> Dict | None:
+    import json
+    logger = logging.getLogger(__name__)
+
     processed_dict = None
 
+    def try_parse_json_from_content(content: str, origin: str):
+        try:
+            parsed = json.loads(content.strip())
+            logger.debug(f"[{agent_name}] Parsed JSON from {origin}: {parsed}")
+            return parsed
+        except json.JSONDecodeError as e:
+            logger.warning(f"[{agent_name}] Failed to parse content from {origin} as JSON: {e}")
+            return None
+
     if isinstance(result_data, dict):
-        processed_dict = result_data
-    elif isinstance(result_data, str):
-        stripped_res = result_data.strip()
-        if stripped_res.startswith('{') and stripped_res.endswith('}'):
-            try:
-                parsed_json = json.loads(stripped_res)
-                if isinstance(parsed_json, dict):
-                    processed_dict = parsed_json
-                    logger.info(f"Agent '{agent_name}' returned valid JSON.")
-            except json.JSONDecodeError:
-                logger.warning(f"Agent '{agent_name}' failed JSON decode.")
-        elif looks_like_sql(stripped_res):
-            processed_dict = {"postgresql_sql": stripped_res}
+        logger.debug(f"[{agent_name}] Raw result_data (dict): {result_data}")
+        message = result_data.get("message")
+        if isinstance(message, dict):
+            content = message.get("content", "")
+            parsed = try_parse_json_from_content(content, "message.content")
+            if isinstance(parsed, dict):
+                processed_dict = parsed
         else:
-            logger.warning(f"Agent '{agent_name}' returned an unrecognized string.")
-    else:
-        logger.warning(f"Agent '{agent_name}' returned unexpected type {type(result_data)}")
+            content = result_data.get("content", "")
+            parsed = try_parse_json_from_content(content, "content")
+            if isinstance(parsed, dict):
+                processed_dict = parsed
+
+        if not processed_dict and "postgresql_sql" in result_data:
+            logger.debug(f"[{agent_name}] Using result_data as-is.")
+            processed_dict = result_data
+
+    elif isinstance(result_data, str):
+        logger.debug(f"[{agent_name}] Raw result_data (str): {result_data}")
+        parsed = try_parse_json_from_content(result_data, "string")
+        if isinstance(parsed, dict):
+            processed_dict = parsed
+        elif looks_like_sql(result_data):
+            logger.debug(f"[{agent_name}] Recognized raw SQL string.")
+            processed_dict = {"postgresql_sql": result_data}
 
     if processed_dict and "postgresql_sql" in processed_dict:
         processed_dict["agent_name"] = agent_name
         processed_dict.setdefault("transformations", [])
+        logger.info(f"Agent '{agent_name}' returned valid JSON with SQL.")
         return processed_dict
     elif processed_dict:
-        logger.warning(f"Missing 'postgresql_sql' in result from '{agent_name}'.")
+        logger.warning(f"[{agent_name}] Missing 'postgresql_sql' key in parsed result.")
         return None
+
+    logger.warning(f"[{agent_name}] Could not extract valid result.")
     return None
 
 async def run_parallel_conversion(agent: Any, config: Dict, oracle_sql: str, model_map: Dict[str, str]) -> List[Dict]:
@@ -101,7 +124,7 @@ async def run_parallel_conversion(agent: Any, config: Dict, oracle_sql: str, mod
             try:
                 agent_instance = agent[agent_name]
                 retry_tasks.append(agent_instance.send(payload))
-                retry_map[len(retry_tasks)-1] = original_idx
+                retry_map[len(retry_tasks) - 1] = original_idx
             except Exception as e:
                 logger.error(f"Retry error '{agent_name}': {e}", exc_info=True)
 
@@ -119,7 +142,7 @@ async def run_parallel_conversion(agent: Any, config: Dict, oracle_sql: str, mod
             else:
                 processed = process_agent_result(retry_res, agent_name)
                 if not processed:
-                    error_for_next_retry = f"Retry {attempt+1} invalid: {type(retry_res)}"
+                    error_for_next_retry = f"Retry {attempt + 1} invalid: {type(retry_res)}"
 
             if processed:
                 processed_results[original_idx] = processed
@@ -176,11 +199,7 @@ async def run_pipeline(agent: Any, config: Dict, oracle_sql: str, model_map: Dic
             return {"error": "Merge agent produced empty SQL", "postgresql_sql": ""}
 
         if merged_transformations:
-            core.knowledge.save_transformations(
-                merged_transformations,
-                source_file=source_file,
-                agent_name="merge_and_select"
-            )
+            core.knowledge.save_transformations(merged_transformations)
 
     except Exception as e:
         return {"error": f"Merge error: {e}", "postgresql_sql": ""}
@@ -192,23 +211,33 @@ async def run_pipeline(agent: Any, config: Dict, oracle_sql: str, model_map: Dic
 
     final_result_payload = {}
     try:
+        logger.debug("[DEBUG] Entering pipeline agent execution block")
+        logger.debug(f"[DEBUG] agent object: {agent}")
         pipeline_agent = agent['oracle_to_pg_pipeline']
         final_result_payload_raw = await pipeline_agent.send(pipeline_payload)
+        logger.debug(f"Final pipeline raw output: {final_result_payload_raw}")
+
         final_result_payload = process_agent_result(final_result_payload_raw, "oracle_to_pg_pipeline")
 
         if final_result_payload is None:
+            logger.warning("Pipeline result processing failed, falling back to merge result.")
             final_result_payload = {
                 "error": "Pipeline result processing failed",
-                "postgresql_sql": merged_sql
+                "postgresql_sql": merged_sql,
+                "transformations": merged_transformations,
             }
 
-        if "postgresql_sql" not in final_result_payload:
-            final_result_payload["postgresql_sql"] = merged_sql
-        elif not final_result_payload.get("postgresql_sql"):
+        if not final_result_payload.get("postgresql_sql"):
+            logger.warning("Pipeline returned empty SQL. Falling back to merged SQL.")
             final_result_payload["postgresql_sql"] = merged_sql
 
     except Exception as e:
-        return {"error": f"Final pipeline error: {e}", "postgresql_sql": merged_sql}
+        logger.error(f"Final pipeline error: {e}. Falling back to merged SQL.", exc_info=True)
+        final_result_payload = {
+            "error": f"Final pipeline error: {e}",
+            "postgresql_sql": merged_sql,
+            "transformations": merged_transformations,
+        }
 
     return final_result_payload
 
@@ -217,5 +246,7 @@ async def run_single_sql(agent: Any, config: Dict, oracle_sql: str, source_file:
     if not model_map:
         return {"error": "Missing 'models' in config", "postgresql_sql": ""}
 
+    from core.app import fast_agent_instance
+    logger.debug(f"[DEBUG] fast_agent_instance registered agents: {list(fast_agent_instance.agents.keys())}")
     result_payload = await run_pipeline(agent, config, oracle_sql, model_map, source_file)
     return result_payload
