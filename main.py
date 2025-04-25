@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import sys
 from pathlib import Path
 
 from config.loader import load_sqlporter_config
@@ -14,10 +15,8 @@ from core.file_io import (
 )
 from core.runner import run_single_sql
 
-# ✅ FastAgent는 core.app에서 공유 인스턴스를 사용
 from core.app import fast_agent_instance
 
-# ✅ 에이전트 등록을 위한 강제 import (절대 생략하면 안 됨)
 import agents.converters
 import agents.merge
 import agents.evaluator
@@ -25,6 +24,12 @@ import agents.pipeline
 
 __version__ = "1.0.0"
 
+def resource_path(relative_path: str) -> Path:
+    try:
+        base_path = Path(sys._MEIPASS)
+    except AttributeError:
+        base_path = Path(__file__).parent
+    return base_path / relative_path
 
 def main():
     parser = argparse.ArgumentParser(description="SQLPorter-AI")
@@ -38,13 +43,14 @@ def main():
         print(f"SQLPorter-AI version {__version__}")
         return
 
-    config = load_sqlporter_config(args.config)
+    config_path = resource_path(args.config)
+    config = load_sqlporter_config(config_path)
     setup_logging(config.get("logger", {}))
 
     paths = config.get("paths", {})
-    input_dir = Path(paths.get("input_dir", "./ASIS"))
-    output_dir = Path(paths.get("output_dir", "./TOBE"))
-    report_dir = Path(paths.get("report_dir", "./reports"))
+    input_dir = resource_path(paths.get("input_dir", "./ASIS"))
+    output_dir = resource_path(paths.get("output_dir", "./TOBE"))
+    report_dir = resource_path(paths.get("report_dir", "./reports"))
     prefix = config.get("settings", {}).get("comment_prefix", "--")
 
     summary = {}
@@ -100,7 +106,6 @@ def main():
         logging.info(f"Conversion complete. Report generated: {report_file}")
     except Exception as e:
         logging.exception(f"Unexpected error while writing report: {e}")
-
 
 if __name__ == "__main__":
     main()

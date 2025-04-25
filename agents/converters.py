@@ -29,20 +29,19 @@ Convert the given Oracle SQL to PostgreSQL.
 }
 """
 
+def register(name, model_name, instruction_text):
+    @fast_agent_instance.agent(name=name, model=model_name, instruction=instruction_text)
+    async def converter(payload: dict):
+        return payload
+
 # Register all converters using loop
-for agent_name in ["converter_1", "converter_2", "converter_3"]:
+for agent_name in models_config:
     model = models_config.get(agent_name)
-    custom_instruction = instructions_config.get(agent_name)
-    
+    custom_instruction = instructions_config.get(agent_name, "")
+
     if custom_instruction:
         instruction = f"{DEFAULT_INSTRUCTION.strip()}\n\n{custom_instruction.strip()}"
     else:
         instruction = DEFAULT_INSTRUCTION
-
-    def register(name, model_name, instruction_text):
-        @fast_agent_instance.agent(name=name, model=model_name, instruction=instruction_text)
-        async def converter(payload: dict):
-            return payload
-        return converter
 
     register(agent_name, model, instruction)

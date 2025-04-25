@@ -5,12 +5,6 @@ import sys
 DEFAULT_CONFIG_PATH = Path("fastagent.config.yaml")
 
 SAMPLE_CONFIG = {
-    "default_model": "openai.gpt-4o-mini",
-
-    "generic": {
-        "base_url": "http://localhost:11434/v1"
-    },
-
     "logger": {
         "level": "INFO",
         "type": "both",
@@ -20,20 +14,6 @@ SAMPLE_CONFIG = {
         "show_tools": True,
         "truncate_tools": True
     },
-
-    "mcp": {
-        "servers": {
-            "fetch": {
-                "command": "uvx",
-                "args": ["mcp-server-fetch"]
-            },
-            "filesystem": {
-                "command": "npx",
-                "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
-            }
-        }
-    },
-
     "sqlporter": {
         "models": {
             "converter_1": "generic.gemma3:4b",
@@ -62,7 +42,6 @@ SAMPLE_CONFIG = {
     }
 }
 
-
 def generate_sample_yaml(path: Path = DEFAULT_CONFIG_PATH):
     """Generate a full sample config file if one does not exist."""
     try:
@@ -72,7 +51,6 @@ def generate_sample_yaml(path: Path = DEFAULT_CONFIG_PATH):
     except IOError as e:
         print(f"Error creating sample config: {e}", file=sys.stderr)
         sys.exit(1)
-
 
 def load_sqlporter_config(path: Path = DEFAULT_CONFIG_PATH) -> dict:
     """Load the configuration YAML file and return the sqlporter section."""
