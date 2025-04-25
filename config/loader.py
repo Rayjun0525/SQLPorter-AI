@@ -28,11 +28,6 @@ SAMPLE_CONFIG = {
             ),
             "converter_3": ""
         },
-        "paths": {
-            "input_dir": "./ASIS",
-            "output_dir": "./TOBE",
-            "report_dir": "./reports"
-        },
         "settings": {
             "max_refinements": 3,
             "min_rating": "EXCELLENT",
