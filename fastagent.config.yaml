@@ -4,8 +4,8 @@ generic:
   base_url: "http://localhost:11434/v1"
 
 logger:
-  level: INFO
-  type: both
+  level: info
+  type: console
   path: ./logs/sqlporter.log
   progress_display: true
   show_chat: true
@@ -24,7 +24,7 @@ mcp:
 sqlporter:
   models:
     converter_1: "generic.gemma3:4b"
-    converter_2: "generic.llama3.2:3b"
+    converter_2: "generic.llama3.2:1b"
     converter_3: "openai.gpt-4o-mini"
 
   instructions:
