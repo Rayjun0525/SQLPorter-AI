@@ -72,9 +72,26 @@ async def run_parallel_conversion(agent: Any, config: Dict, oracle_sql: str, mod
 
     tree = core.knowledge.load_transformations()
     relevant_keys = core.knowledge.extract_relevant_keys(oracle_sql, list(tree.keys()))
-    formatted_knowledge = core.knowledge.format_rules_for_prompt(tree, relevant_keys)
-    payload["known_transformations"] = formatted_knowledge
 
+    # Collect raw relevant transformation rules as list
+    relevant_rules = []
+    for key in relevant_keys:
+        if key not in tree:
+            continue
+        for rule in tree[key]:
+            relevant_rules.append({
+                "from": key,
+                "to": rule["to"],
+                "context": rule.get("context", ""),
+                "example": rule.get("example", "")
+            })
+
+    # Construct payload
+    payload = {
+        "oracle_sql": oracle_sql,
+        "known_transformations": relevant_rules
+    }
+    
     for agent_name in model_map:
         try:
             agent_instance = agent[agent_name]
@@ -199,7 +216,18 @@ async def run_pipeline(agent: Any, config: Dict, oracle_sql: str, model_map: Dic
             return {"error": "Merge agent produced empty SQL", "postgresql_sql": ""}
 
         if merged_transformations:
-            core.knowledge.save_transformations(merged_transformations)
+            try:
+                km_agent = agent["knowledge_manager"]
+                audit_result = await km_agent.send({
+                    "action": "audit",
+                    "rules": merged_transformations
+                })
+                cleaned_rules = audit_result.get("cleaned_rules", [])
+                core.knowledge.save_transformations(cleaned_rules)
+                logger.info(f"Knowledge cleaned and saved. Removed: {audit_result.get('removed_count', 0)}")
+            except Exception as e:
+                logger.warning(f"Knowledge cleanup failed, saving raw transformations: {e}", exc_info=True)
+                core.knowledge.save_transformations(merged_transformations)
 
     except Exception as e:
         return {"error": f"Merge error: {e}", "postgresql_sql": ""}

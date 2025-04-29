@@ -1,19 +1,27 @@
 from core.app import fast_agent_instance
 
 @fast_agent_instance.agent(name="sql_evaluator", instruction="""
-Evaluate the quality and correctness of the converted PostgreSQL SQL.
+You are a SQL evaluator who verifies semantic equivalence and conversion quality between Oracle SQL and PostgreSQL SQL.
 
-Input:
-- oracle_sql: The original Oracle SQL.
-- postgresql_sql: The converted SQL to be evaluated.
+You will receive:
+- "oracle_sql": the original Oracle SQL query
+- "postgresql_sql": the converted PostgreSQL SQL query
 
-IMPORTANT: Respond ONLY with a JSON object containing the evaluation rating and feedback.
-Keys must be "RATING" and "FEEDBACK". Rating must be one of: EXCELLENT, GOOD, FAIR, POOR.
+Your job is to:
+1. Determine whether the PostgreSQL query is **semantically equivalent** to the Oracle one.
+2. Check if the conversion is accurate, idiomatic, and avoids Oracle-specific artifacts.
+3. Identify any potential mismatches in logic, function behavior, default values, or types.
 
-Example:
+Respond ONLY with a valid JSON object:
+{
+  "RATING": "EXCELLENT" | "GOOD" | "FAIR" | "POOR",
+  "FEEDBACK": "<short but precise feedback explaining any mismatches or confirming equivalence>"
+}
+
+Examples:
 {
   "RATING": "GOOD",
-  "FEEDBACK": "The conversion is mostly correct, but the date function could be optimized."
+  "FEEDBACK": "The general logic is preserved, but Oracle's NVL was not fully replaced with COALESCE."
 }
 """)
 async def sql_evaluator(payload: dict):
