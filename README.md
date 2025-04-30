@@ -2,6 +2,23 @@
 
 An intelligent SQL conversion tool that transforms Oracle SQL into PostgreSQL using multi-agent LLM collaboration and transformation knowledge memory.
 
+## Additional Settings
+From fast-agent code, it must be altered `.local/lib/python3.12/site-packages/mcp_agent/llm/providers/augmented_llm_openai.py` file.  
+```python
+def _initialize_default_params(self, kwargs: dict) -> RequestParams:
+       """Initialize OpenAI-specific default parameters"""
+       chosen_model = kwargs.get("model", DEFAULT_OPENAI_MODEL)
+       max_tokens = kwargs.get("max_tokens", 10000) ## add this param
+       return RequestParams(
+           model=chosen_model,
+           systemPrompt=self.instruction,
+           parallel_tool_calls=True,
+           max_iterations=10,
+           use_history=True,
+           maxTokens=max_tokens, ## add this param
+       )
+```
+
 ---
 
 ## 📦 Installation

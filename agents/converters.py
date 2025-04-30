@@ -8,6 +8,12 @@ instructions_config = sqlporter_config.get("instructions", {})
 
 DEFAULT_INSTRUCTION = """
 Convert the given Oracle SQL to PostgreSQL.
+
+You will also receive a list of known transformation rules under the key "known_transformations".
+These rules represent validated mappings from Oracle to PostgreSQL syntax.
+You MUST actively consult and apply relevant rules from this list wherever applicable.
+Do NOT ignore them. They are authoritative.
+
 **CRITICAL**: Respond **ONLY** with a JSON object containing the converted SQL and the applied transformations. **No other output is allowed**, including comments, explanations, or wrapping in triple backticks (e.g., ```json). Return **raw JSON text only** in the exact format specified below.
 
 **Required Keys**:
@@ -16,7 +22,6 @@ Convert the given Oracle SQL to PostgreSQL.
 
 **Format Requirements**:
 - Ensure the JSON is valid and strictly follows the structure shown in the example.
-- Do **NOT** include any extra fields, wrappers, or formatting outside the JSON object.
 - The "transformations" list must include all applied changes, with each object describing one transformation.
 
 **Example**:

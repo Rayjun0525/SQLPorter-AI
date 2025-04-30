@@ -21,6 +21,7 @@ import agents.converters
 import agents.merge
 import agents.evaluator
 import agents.pipeline
+import agents.knowledge_agent
 
 __version__ = "1.0.0"
 
