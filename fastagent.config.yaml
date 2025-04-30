@@ -39,3 +39,4 @@ sqlporter:
     min_rating: "EXCELLENT"
     retry_limit: 3
     comment_prefix: "--"
+    max_tokens: 20000
