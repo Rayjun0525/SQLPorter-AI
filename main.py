@@ -49,9 +49,9 @@ def main():
     setup_logging(config.get("logger", {}))
 
     paths = config.get("paths", {})
-    input_dir = resource_path(paths.get("input_dir", "./ASIS"))
-    output_dir = resource_path(paths.get("output_dir", "./TOBE"))
-    report_dir = resource_path(paths.get("report_dir", "./reports"))
+    input_dir = Path(paths.get("input_dir", "./ASIS"))
+    output_dir = Path(paths.get("output_dir", "./TOBE"))
+    report_dir = Path(paths.get("report_dir", "./reports"))
     prefix = config.get("settings", {}).get("comment_prefix", "--")
 
     summary = {}
