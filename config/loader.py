@@ -67,7 +67,7 @@ def load_sqlporter_config(path: Path = DEFAULT_CONFIG_PATH) -> dict:
 
             sqlporter_config = config["sqlporter"]
             
-            # 경로 검증
+            # Path validation
             paths = sqlporter_config.get("paths", {})
             for dir_name, dir_path in paths.items():
                 if not dir_path:
@@ -77,7 +77,7 @@ def load_sqlporter_config(path: Path = DEFAULT_CONFIG_PATH) -> dict:
                 path_obj = Path(dir_path)
                 if not path_obj.exists():
                     print(f"Warning: {dir_name} path does not exist: {dir_path}")
-                    # 경로가 없으면 자동 생성
+                    # Create directory if it doesn't exist
                     path_obj.mkdir(parents=True, exist_ok=True)
                     print(f"Created directory: {dir_path}")
 
