@@ -28,6 +28,11 @@ SAMPLE_CONFIG = {
             ),
             "converter_3": ""
         },
+        "paths": {
+            "input_dir": "./ASIS",
+            "output_dir": "./TOBE",
+            "report_dir": "./reports"
+        },
         "settings": {
             "max_refinements": 3,
             "min_rating": "EXCELLENT",
@@ -59,7 +64,24 @@ def load_sqlporter_config(path: Path = DEFAULT_CONFIG_PATH) -> dict:
             if config is None or "sqlporter" not in config:
                 print(f"Invalid or missing 'sqlporter' section in {path}.", file=sys.stderr)
                 sys.exit(1)
-            return config["sqlporter"]
+
+            sqlporter_config = config["sqlporter"]
+            
+            # Path validation
+            paths = sqlporter_config.get("paths", {})
+            for dir_name, dir_path in paths.items():
+                if not dir_path:
+                    print(f"Warning: Empty path for {dir_name}")
+                    continue
+                
+                path_obj = Path(dir_path)
+                if not path_obj.exists():
+                    print(f"Warning: {dir_name} path does not exist: {dir_path}")
+                    # Create directory if it doesn't exist
+                    path_obj.mkdir(parents=True, exist_ok=True)
+                    print(f"Created directory: {dir_path}")
+
+            return sqlporter_config
     except yaml.YAMLError as e:
         print(f"YAML parsing error in config file ({path}): {e}", file=sys.stderr)
         sys.exit(1)

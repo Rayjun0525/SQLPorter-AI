@@ -1,10 +1,13 @@
 from core.app import fast_agent_instance
 from config.loader import load_sqlporter_config
+from mcp_agent.llm.augmented_llm import RequestParams
 
 # Load configuration
 sqlporter_config = load_sqlporter_config()
 models_config = sqlporter_config.get("models", {})
 instructions_config = sqlporter_config.get("instructions", {})
+settings_config = sqlporter_config.get("settings", {})
+max_tokens = settings_config.get("max_tokens", 10000)
 
 DEFAULT_INSTRUCTION = """
 Convert the given Oracle SQL to PostgreSQL.
@@ -35,7 +38,7 @@ Do NOT ignore them. They are authoritative.
 """
 
 def register(name, model_name, instruction_text):
-    @fast_agent_instance.agent(name=name, model=model_name, instruction=instruction_text)
+    @fast_agent_instance.agent(name=name, model=model_name, instruction=instruction_text, request_params=RequestParams(maxTokens=max_tokens),)
     async def converter(payload: dict):
         return payload
 

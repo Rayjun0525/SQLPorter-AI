@@ -1,4 +1,10 @@
 from core.app import fast_agent_instance
+from config.loader import load_sqlporter_config
+from mcp_agent.llm.augmented_llm import RequestParams
+
+sqlporter_config = load_sqlporter_config()
+settings_config = sqlporter_config.get("settings", {})
+max_tokens = settings_config.get("max_tokens", 10000)
 
 @fast_agent_instance.agent(name="merge_and_select", instruction="""
 Given the original Oracle SQL and multiple candidate PostgreSQL conversions,
@@ -21,6 +27,6 @@ Example:
     {"from": "NVL", "to": "COALESCE", "context": "function call in WHERE clause"}
   ]
 }
-""")
+""",  request_params=RequestParams(maxTokens=max_tokens),)
 async def merge_and_select(payload: dict):
     return payload

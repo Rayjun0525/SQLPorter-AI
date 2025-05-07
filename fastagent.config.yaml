@@ -27,6 +27,11 @@ sqlporter:
     converter_2: "generic.llama3.2:1b"
     converter_3: "openai.gpt-4o-mini"
 
+  paths:
+    input_dir: "./my_input"
+    output_dir: "./my_output"
+    report_dir: "./my_reports"
+    
   instructions:
     converter_1: ""
     converter_2: |
@@ -39,3 +44,4 @@ sqlporter:
     min_rating: "EXCELLENT"
     retry_limit: 3
     comment_prefix: "--"
+    max_tokens: 10000

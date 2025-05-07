@@ -1,6 +1,12 @@
 from core.app import fast_agent_instance
 from core.knowledge import load_transformations, save_transformations
 from typing import List, Dict
+from config.loader import load_sqlporter_config
+from mcp_agent.llm.augmented_llm import RequestParams
+
+sqlporter_config = load_sqlporter_config()
+settings_config = sqlporter_config.get("settings", {})
+max_tokens = settings_config.get("max_tokens", 10000)
 
 @fast_agent_instance.agent(name="knowledge_manager", instruction="""
 You are an expert in SQL dialects and responsible for auditing and cleaning transformation knowledge for Oracle-to-PostgreSQL SQL conversion.
@@ -33,7 +39,7 @@ Respond ONLY with a valid JSON object:
     }
   ]
 }
-""")
+""", request_params=RequestParams(maxTokens=max_tokens),)
 async def knowledge_manager(payload: dict):
     rules: List[Dict] = payload.get("rules", [])
     cleaned = []
